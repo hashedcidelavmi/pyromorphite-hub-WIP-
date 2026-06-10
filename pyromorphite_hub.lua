@@ -1,5 +1,5 @@
--- // Pyromorphite Hub v3.6 — Monolithic Emerald (Safe Compilation Build)
--- Полный фикс: убраны конфликты gethui(), добавлен принудительный вывод ошибок.
+-- // Pyromorphite Hub v4.0 — Emerald Arcade (Monolithic Clean Build)
+-- Оптимизация: убраны лимиты экрана, добавлены кнопки [X] и [Reboot] в шапку.
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -11,47 +11,60 @@ local SoundService = game:GetService("SoundService")
 local Player = Players.LocalPlayer
 local Camera = Workspace.CurrentCamera
 
--- Цветовая палитра
+-- Изумрудная палитра
 local EmeraldGreen = Color3.fromRGB(0, 255, 100)
 local ActiveRed = Color3.fromRGB(255, 50, 50)
 local DarkGray = Color3.fromRGB(30, 30, 30)
 local Black = Color3.fromRGB(15, 15, 15)
 
--- Самый надежный родитель для мобильных читов — PlayerGui напрямую
 local TargetParent = Player:WaitForChild("PlayerGui")
 
--- Безопасный запуск звука через pcall (если не сработает — скрипт не упадет)
-pcall(function()
-	local startSound = Instance.new("Sound", SoundService)
-	startSound.SoundId = "rbxassetid://130113140"
-	startSound.Volume = 1
-	startSound:Play()
-end)
+-- Ссылка на твой RAW гитхаб для функции авто-ребута
+local GitHubRawURL = "https://raw.githubusercontent.com/hashedcidelavmi/pyromorphite-hub-WIP-/main/hub.lua"
 
--- // [ОКНО ПРОВЕРКИ ЗАПУСКА] 
-local DebugGui = Instance.new("ScreenGui", TargetParent)
-DebugGui.Name = "PyroDebug"
-local DebugFrame = Instance.new("Frame", DebugGui)
-DebugFrame.Size = UDim2.new(0, 220, 0, 50)
-DebugFrame.Position = UDim2.new(0.5, -110, 0.4, -25)
-DebugFrame.BackgroundColor3 = Black
-Instance.new("UICorner", DebugFrame).CornerRadius = UDim.new(0, 8)
-local dbgStroke = Instance.new("UIStroke", DebugFrame)
-dbgStroke.Color = EmeraldGreen; dbgStroke.Thickness = 1.5
-local DebugLabel = Instance.new("TextLabel", DebugFrame)
-DebugLabel.Size = UDim2.new(1, 0, 1, 0); DebugLabel.BackgroundTransparency = 1
-DebugLabel.Text = "Pyromorphite: Booting..."
-DebugLabel.TextColor3 = EmeraldGreen; DebugLabel.Font = Enum.Font.Arcade; DebugLabel.TextSize = 14
+-- Переменные для глобальной очистки
+local noclipConnection = nil
+local visualEnabled = false
+local noclip = false
 
--- Основной контейнер хаба
-local ScreenGui = Instance.new("ScreenGui", TargetParent)
-ScreenGui.Name = "PyromorphiteHub"
-ScreenGui.ResetOnSpawn = false
+-- Глобальная функция очистки всех дочерних процессов
+local function KillAllScripts()
+	-- 1. Выключаем и чистим 1PCT
+	visualEnabled = false
+	for _, desc in ipairs(Workspace:GetDescendants()) do
+		if desc.Name == "FOVTracer" or desc.Name == "Line1" or desc.Name == "Line2" then
+			desc:Destroy()
+		end
+	end
+	
+	-- 2. Выключаем и чистим Ноклип
+	if noclipConnection then 
+		noclipConnection:Disconnect() 
+		noclipConnection = nil
+	end
+	pcall(function()
+		local char = Player.Character
+		if char then
+			for _, part in ipairs(char:GetDescendants()) do
+				if part:IsA("BasePart") then part.CanCollide = true end
+			end
+		end
+	end)
+	
+	-- 3. Закрываем встроенный флингер, если он был открыт
+	local embeddedFling = TargetParent:FindFirstChild("EmbeddedFlingGUI")
+	if embeddedFling then embeddedFling:Destroy() end
+	
+	-- 4. Удаляем сам Хаб
+	local mainHub = TargetParent:FindFirstChild("PyromorphiteHub")
+	if mainHub then mainHub:Destroy() end
+end
 
--- // 1. УМНАЯ КНОПКА ОТКРЫТИЯ (Стабильные SafeZone лимиты)
-local toggleButton = Instance.new("TextButton", ScreenGui)
+
+-- // 1. КНОПКА ОТКРЫТИЯ ХАБА ("P")
+local toggleButton = Instance.new("TextButton")
 toggleButton.Size = UDim2.new(0, 38, 0, 38)
-toggleButton.Position = UDim2.new(0, 60, 0, 150)
+toggleButton.Position = UDim2.new(0, 40, 0, 150)
 toggleButton.BackgroundColor3 = Black
 toggleButton.Text = "P"
 toggleButton.TextColor3 = EmeraldGreen
@@ -59,6 +72,7 @@ toggleButton.TextScaled = true
 toggleButton.Font = Enum.Font.Arcade
 toggleButton.BorderSizePixel = 0
 toggleButton.ZIndex = 10
+toggleButton.Parent = ScreenGui
 Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(1, 0)
 
 local btnStroke = Instance.new("UIStroke", toggleButton)
@@ -70,51 +84,34 @@ local dragDistance = 0
 
 toggleButton.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		btnDragging = true
-		dragDistance = 0
-		btnDragStart = input.Position
-		btnStartPos = Vector2.new(toggleButton.AbsolutePosition.X, toggleButton.AbsolutePosition.Y)
-		
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then btnDragging = false end
-		end)
+		btnDragging = true; dragDistance = 0; btnDragStart = input.Position; btnStartPos = toggleButton.Position
+		input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then btnDragging = false end end)
 	end
 end)
-
 toggleButton.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-		btnDragInput = input
-	end
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then btnDragInput = input end
 end)
-
 UserInputService.InputChanged:Connect(function(input)
 	if input == btnDragInput and btnDragging then
 		local delta = input.Position - btnDragStart
 		dragDistance = dragDistance + delta.Magnitude
-		
-		local screenSize = Camera.ViewportSize
-		local targetX = btnStartPos.X + delta.X
-		local targetY = btnStartPos.Y + delta.Y
-		
-		targetX = math.clamp(targetX, 45, screenSize.X - 83)
-		targetY = math.clamp(targetY, 45, screenSize.Y - 83)
-		
-		toggleButton.Position = UDim2.new(0, targetX, 0, targetY)
+		toggleButton.Position = UDim2.new(btnStartPos.X.Scale, btnStartPos.X.Offset + delta.X, btnStartPos.Y.Scale, btnStartPos.Y.Offset + delta.Y)
 	end
 end)
 
-DebugLabel.Text = "Pyromorphite: Core UI..."
 
 -- // 2. ГЛАВНОЕ ОКНО ХАБА
-local Main = Instance.new("Frame", ScreenGui)
+local Main = Instance.new("Frame")
 Main.Size = UDim2.new(0, 380, 0, 280)
 Main.Position = UDim2.new(0.5, -190, 0.5, -140)
 Main.BackgroundColor3 = DarkGray; Main.BorderSizePixel = 0; Main.Visible = false; Main.ClipsDescendants = true
+Main.Parent = ScreenGui
 Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 16)
 
 local mainStroke = Instance.new("UIStroke", Main)
 mainStroke.Color = EmeraldGreen; mainStroke.Thickness = 2; mainStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
+-- Шапка/Заголовок
 local Title = Instance.new("TextLabel", Main)
 Title.Size = UDim2.new(1, 0, 0, 35)
 Title.BackgroundTransparency = 1; Title.Text = ""; Title.TextColor3 = EmeraldGreen
@@ -128,8 +125,51 @@ local function typewrite(label, text)
 	end
 end
 
+-- КНОПКА ЗАКРЫТИЯ [X] (Справа в шапке)
+local CloseHubBtn = Instance.new("TextButton", Main)
+CloseHubBtn.Size = UDim2.new(0, 25, 0, 25)
+CloseHubBtn.Position = UDim2.new(1, -35, 0, 5)
+CloseHubBtn.BackgroundColor3 = Black
+CloseHubBtn.Text = "X"
+CloseHubBtn.TextColor3 = ActiveRed
+CloseHubBtn.Font = Enum.Font.Arcade
+CloseHubBtn.TextSize = 14
+CloseHubBtn.ZIndex = 5
+Instance.new("UICorner", CloseHubBtn).CornerRadius = UDim.new(0, 6)
+local closeStroke = Instance.new("UIStroke", CloseHubBtn)
+closeStroke.Color = ActiveRed; closeStroke.Thickness = 1.5; closeStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+CloseHubBtn.MouseButton1Click:Connect(function()
+	KillAllScripts()
+end)
+
+-- КНОПКА ПЕРЕЗАГРУЗКИ [↻] (Слева в шапке)
+local RebootHubBtn = Instance.new("TextButton", Main)
+RebootHubBtn.Size = UDim2.new(0, 25, 0, 25)
+RebootHubBtn.Position = UDim2.new(0, 10, 0, 5)
+RebootHubBtn.BackgroundColor3 = Black
+RebootHubBtn.Text = "R" -- Сигнализирует о Reboot
+RebootHubBtn.TextColor3 = EmeraldGreen
+RebootHubBtn.Font = Enum.Font.Arcade
+RebootHubBtn.TextSize = 14
+RebootHubBtn.ZIndex = 5
+Instance.new("UICorner", RebootHubBtn).CornerRadius = UDim.new(0, 6)
+local rebootStroke = Instance.new("UIStroke", RebootHubBtn)
+rebootStroke.Color = EmeraldGreen; rebootStroke.Thickness = 1.5; rebootStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+
+RebootHubBtn.MouseButton1Click:Connect(function()
+	KillAllScripts() -- Сносим всё старое
+	task.wait(0.2)
+	-- Качаем и запускаем чистую версию заново
+	pcall(function()
+		loadstring(game:HttpGet(GitHubRawURL, true))()
+	end)
+end)
+
+
+-- Сетка кнопок (Опущена до 55 пикселей для идеального отображения рамок)
 local ScrollGrid = Instance.new("ScrollingFrame", Main)
-ScrollGrid.Size = UDim2.new(1, -20, 1, -60); ScrollGrid.Position = UDim2.new(0, 10, 0, 50)
+ScrollGrid.Size = UDim2.new(1, -20, 1, -65); ScrollGrid.Position = UDim2.new(0, 10, 0, 55)
 ScrollGrid.BackgroundTransparency = 1; ScrollGrid.BorderSizePixel = 0
 ScrollGrid.ScrollBarThickness = 4; ScrollGrid.ScrollBarImageColor3 = EmeraldGreen
 
@@ -157,6 +197,7 @@ for i = 1, 16 do
 	Buttons[i] = btn
 end
 
+-- Топ-3 функциональных слота сверху
 Buttons[1].Text = "1PCT [OFF]"; Buttons[1].TextColor3 = EmeraldGreen; Buttons[1]:FindFirstChildOfClass("UIStroke").Color = EmeraldGreen
 Buttons[2].Text = "Noclip [OFF]"; Buttons[2].TextColor3 = EmeraldGreen; Buttons[2]:FindFirstChildOfClass("UIStroke").Color = EmeraldGreen
 Buttons[3].Text = "Fling GUI"; Buttons[3].TextColor3 = EmeraldGreen; Buttons[3]:FindFirstChildOfClass("UIStroke").Color = EmeraldGreen
@@ -166,9 +207,8 @@ UIGridLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
 	ScrollGrid.CanvasSize = UDim2.new(0, 0, 0, UIGridLayout.AbsoluteContentSize.Y + 20)
 end)
 
-DebugLabel.Text = "Pyromorphite: System Link..."
 
--- // 3. АНИМАЦИИ ОТКРЫТИЯ/ЗАКРЫТИЯ
+-- // 3. ОБЩИЙ ДРАГ И ТВИНИНГ ХАБА (Без лимитов на вылет за экран)
 local open = false
 local function animateOpen()
 	Main.Visible = true; Main.Size = UDim2.new(0, 0, 0, 0); Main.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -196,7 +236,6 @@ toggleButton.MouseButton1Click:Connect(function()
 	end
 end)
 
--- Драг главного окна
 local dragging, dragInput, dragStart, startPos
 Title.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -208,25 +247,20 @@ Title.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserIn
 UserInputService.InputChanged:Connect(function(input)
 	if input == dragInput and dragging then
 		local delta = input.Position - dragStart
-		local screenSize = Camera.ViewportSize
-		local newX = startPos.X.Offset + delta.X
-		local newY = startPos.Y.Offset + delta.Y
-		newX = math.clamp(newX, -350, screenSize.X - 30)
-		newY = math.clamp(newY, 0, screenSize.Y - 30)
-		Main.Position = UDim2.new(startPos.X.Scale, newX, startPos.Y.Scale, newY)
+		-- Свободный классический драг без математических clamp-зажимов
+		Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
 	end
 end)
 
 
 -- ====================================================================
--- ФУНКЦИЯ 1: 1PCT TRACERS
+-- ФУНКЦИЯ 1: 1PCT TRACERS (3D FOV Cone)
 -- ====================================================================
 local FOV_ANGLE = math.rad(110)
 local FOV_RANGE = 30
 local SEGMENTS = 12
 local HEIGHT_OFFSET = -1.5
 local visualizers = {}
-local visualEnabled = false
 
 local function createVisualizer()
 	local parts = {}
@@ -235,6 +269,7 @@ local function createVisualizer()
 		wedge.Anchored = true; wedge.CanCollide = false
 		wedge.Material = Enum.Material.Neon; wedge.Color = EmeraldGreen
 		wedge.Transparency = 0.25; wedge.CastShadow = false
+		wedge.Name = "FOVTracer"
 		wedge.Parent = Workspace
 		parts[i] = {wedge = wedge, Line1 = nil, Line2 = nil}
 	end
@@ -285,17 +320,6 @@ local function updateVisualizer(player)
 	end
 end
 
-local function clearAllVisuals()
-	for _, parts in pairs(visualizers) do
-		for _, obj in ipairs(parts) do
-			if obj.wedge then obj.wedge:Destroy() end
-			if obj.Line1 then obj.Line1:Destroy() end
-			if obj.Line2 then obj.Line2:Destroy() end
-		end
-	end
-	visualizers = {}
-end
-
 Buttons[1].MouseButton1Click:Connect(function()
 	visualEnabled = not visualEnabled
 	if visualEnabled then
@@ -306,7 +330,15 @@ Buttons[1].MouseButton1Click:Connect(function()
 		Buttons[1].Text = "1PCT [OFF]"
 		Buttons[1].TextColor3 = EmeraldGreen
 		Buttons[1]:FindFirstChildOfClass("UIStroke").Color = EmeraldGreen
-		clearAllVisuals()
+		-- Ручная зачистка при выключении
+		for _, parts in pairs(visualizers) do
+			for _, obj in ipairs(parts) do
+				if obj.wedge then obj.wedge:Destroy() end
+				if obj.Line1 then obj.Line1:Destroy() end
+				if obj.Line2 then obj.Line2:Destroy() end
+			end
+		end
+		visualizers = {}
 	end
 end)
 
@@ -320,9 +352,6 @@ end)
 -- ====================================================================
 -- ФУНКЦИЯ 2: NOCLIP
 -- ====================================================================
-local noclip = false
-local noclipConnection
-
 Buttons[2].MouseButton1Click:Connect(function()
 	noclip = not noclip
 	if noclip then
@@ -342,7 +371,10 @@ Buttons[2].MouseButton1Click:Connect(function()
 		Buttons[2].TextColor3 = EmeraldGreen
 		Buttons[2]:FindFirstChildOfClass("UIStroke").Color = EmeraldGreen
 		
-		if noclipConnection then noclipConnection:Disconnect() end
+		if noclipConnection then 
+			noclipConnection:Disconnect() 
+			noclipConnection = nil
+		end
 		
 		task.spawn(function()
 			local char = Player.Character
@@ -449,45 +481,11 @@ local function CreateEmbeddedFlingGUI()
 				yPosition = yPosition + 35
 			end
 		end
-		ScrollGrid.CanvasSize = UDim2.new(0, 0, 0, yPosition + 5)
+		PlayerScrollFrame.CanvasSize = UDim2.new(0, 0, 0, yPosition + 5)
 	end
 
 	local function SkidFling(TargetPlayer)
 		local Character = Player.Character
 		local Humanoid = Character and Character:FindFirstChildOfClass("Humanoid")
 		local RootPart = Humanoid and Humanoid.RootPart
-		local TCharacter = TargetPlayer.Character
-		if not TCharacter or not Character or not RootPart then return end
-		local THumanoid = TCharacter:FindFirstChildOfClass("Humanoid")
-		local TRootPart = THumanoid and THumanoid.RootPart
-
-		if RootPart.Velocity.Magnitude < 50 then getgenv().OldPos = RootPart.CFrame end
-		if THumanoid and THumanoid.Sit then return Message("Error", TargetPlayer.Name .. " is sitting", 2) end
-
-		workspace.FallenPartsDestroyHeight = -50000
-		local BV = Instance.new("BodyVelocity", RootPart)
-		BV.Velocity = Vector3.new(0, 0, 0); BV.MaxForce = Vector3.new(9e9, 9e9, 9e9)
-		Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, false)
-
-		if TRootPart then
-			local Time = tick()
-			repeat
-				if RootPart and TRootPart and TRootPart.Parent then
-					RootPart.CFrame = TRootPart.CFrame * CFrame.new(0, 1.5, 0)
-					RootPart.Velocity = Vector3.new(9e7, 9e7 * 10, 9e7)
-					RootPart.RotVelocity = Vector3.new(9e8, 9e8, 9e8)
-				end
-				task.wait()
-			until tick() > Time + 2 or not FlingActive
-		end
-
-		BV:Destroy()
-		Humanoid:SetStateEnabled(Enum.HumanoidStateType.Seated, true)
-		if getgenv().OldPos then
-			RootPart.CFrame = getgenv().OldPos
-			workspace.FallenPartsDestroyHeight = getgenv().FPDH
-		end
-	end
-
-	StartButton.MouseButton1Click:Connect(function()
-      
+		local TCharacter = TargetPla
